@@ -480,8 +480,21 @@ mod marker_traits {
 }
 
 mod generic {
+    use serde::{Deserialize, Serialize};
+
     #[typetag::serialize]
     trait Generic<T> {}
+
+    #[typetag::serde]
+    trait PlainTrait {}
+
+    #[derive(Serialize, Deserialize)]
+    struct GenericA<T> {
+        t: T,
+    }
+
+    #[typetag::serde]
+    impl<T: Serialize> PlainTrait for GenericA<T> {}
 }
 
 mod macro_expanded {

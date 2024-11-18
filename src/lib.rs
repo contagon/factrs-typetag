@@ -318,6 +318,7 @@ mod ser;
 
 use self::__private as private;
 
+use alloc::string::String;
 pub use typetag_impl::{deserialize, serde, serialize};
 
 // Object-safe trait bound inserted by typetag serialization. We want this just
@@ -335,6 +336,13 @@ impl<T> Serialize for T where T: ?Sized + erased_serde::Serialize {}
 pub trait Deserialize {}
 
 impl<T> Deserialize for T {}
+
+/// Used to mark types that have been "named"
+///
+/// This tag will be used when the type is used as a generic for a typetag
+pub trait Tag {
+    fn typetag_name(&self) -> String;
+}
 
 // Not public API. Used by generated code.
 #[doc(hidden)]
