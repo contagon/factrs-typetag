@@ -7,7 +7,7 @@ use alloc::boxed::Box;
 use core::fmt::{self, Debug, Display};
 use serde::ser::{self, Error, Impossible, Serialize, StdError};
 
-pub fn expect_str<T>(value: &T, expected_str: &'static str) -> Result<(), Unexpected>
+pub fn expect_str<T>(value: &T, expected_str: &str) -> Result<(), Unexpected>
 where
     T: ?Sized + Serialize,
 {
@@ -57,11 +57,11 @@ impl Display for SerializerState {
     }
 }
 
-struct Serializer {
-    expected_str: &'static str,
+struct Serializer<'a> {
+    expected_str: &'a str,
 }
 
-impl ser::Serializer for Serializer {
+impl<'a> ser::Serializer for Serializer<'a> {
     type Ok = Void;
     type Error = SerializerState;
 

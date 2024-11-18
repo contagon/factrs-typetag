@@ -14,7 +14,7 @@ pub fn serialize<S, T>(
     serializer: S,
     trait_object: &'static str,
     tag: &'static str,
-    variant: &'static str,
+    variant: &str,
     content: &'static str,
     concrete: &T,
 ) -> Result<S::Ok, S::Error>

@@ -130,7 +130,7 @@ fn augment_trait(input: &mut ItemTrait, mode: Mode) {
 
         input.items.push(parse_quote! {
             #[doc(hidden)]
-            fn typetag_name(&self) -> &'static str;
+            fn typetag_name(&self) -> String;
         });
     }
 
@@ -200,7 +200,7 @@ fn externally_tagged(input: &ItemTrait) -> (TokenStream, TokenStream) {
 
     let serialize_impl = quote! {
         let name = <Self as #object #ty_generics>::typetag_name(self);
-        typetag::__private::externally::serialize(serializer, name, self)
+        typetag::__private::externally::serialize(serializer, &name, self)
     };
 
     let deserialize_impl = quote! {
@@ -227,7 +227,7 @@ fn internally_tagged(
 
     let serialize_impl = quote! {
         let name = <Self as #object #ty_generics>::typetag_name(self);
-        typetag::__private::internally::serialize(serializer, #tag, name, self)
+        typetag::__private::internally::serialize(serializer, #tag, &name, self)
     };
 
     let deserialize_impl = quote! {
@@ -256,7 +256,7 @@ fn adjacently_tagged(
 
     let serialize_impl = quote! {
         let name = <Self as #object #ty_generics>::typetag_name(self);
-        typetag::__private::adjacently::serialize(serializer, #object_name, #tag, name, #content, self)
+        typetag::__private::adjacently::serialize(serializer, #object_name, #tag, &name, #content, self)
     };
 
     let deserialize_impl = quote! {

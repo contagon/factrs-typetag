@@ -25,13 +25,13 @@ where
     }
 }
 
-pub struct InternallyTaggedSerializer<S> {
+pub struct InternallyTaggedSerializer<'a, S> {
     pub tag: &'static str,
-    pub variant: &'static str,
+    pub variant: &'a str,
     pub delegate: S,
 }
 
-impl<S> InternallyTaggedSerializer<S>
+impl<'a, S> InternallyTaggedSerializer<'a, S>
 where
     S: Serializer,
 {
@@ -46,7 +46,7 @@ where
     }
 }
 
-impl<S> Serializer for InternallyTaggedSerializer<S>
+impl<'a, S> Serializer for InternallyTaggedSerializer<'a, S>
 where
     S: Serializer,
 {
@@ -58,7 +58,7 @@ where
     type SerializeTupleStruct = SerializeTupleStructAsMapValue<S::SerializeMap>;
     type SerializeTupleVariant = SerializeTupleStructAsMapValue<S::SerializeMap>;
     type SerializeMap = S::SerializeMap;
-    type SerializeStruct = SerializeStructAsMap<S::SerializeMap>;
+    type SerializeStruct = SerializeStructAsMap<'a, S::SerializeMap>;
     type SerializeStructVariant = SerializeStructVariantAsMapValue<S::SerializeMap>;
 
     fn serialize_bool(self, value: bool) -> Result<Self::Ok, Self::Error> {
@@ -387,19 +387,19 @@ where
     }
 }
 
-pub struct SerializeStructAsMap<M> {
+pub struct SerializeStructAsMap<'a, M> {
     map: M,
     tag: &'static str,
-    variant: &'static str,
+    variant: &'a str,
 }
 
-impl<M> SerializeStructAsMap<M> {
-    fn new(map: M, tag: &'static str, variant: &'static str) -> Self {
+impl<'a, M> SerializeStructAsMap<'a, M> {
+    fn new(map: M, tag: &'static str, variant: &'a str) -> Self {
         SerializeStructAsMap { map, tag, variant }
     }
 }
 
-impl<M> SerializeStruct for SerializeStructAsMap<M>
+impl<'a, M> SerializeStruct for SerializeStructAsMap<'a, M>
 where
     M: SerializeMap,
 {

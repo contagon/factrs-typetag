@@ -6,11 +6,7 @@ use core::fmt;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::ser::{SerializeMap, Serializer};
 
-pub fn serialize<S, T>(
-    serializer: S,
-    variant: &'static str,
-    concrete: &T,
-) -> Result<S::Ok, S::Error>
+pub fn serialize<S, T>(serializer: S, variant: &str, concrete: &T) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
     T: ?Sized + erased_serde::Serialize,

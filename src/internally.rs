@@ -17,7 +17,7 @@ use serde::ser::{Serialize, Serializer};
 pub fn serialize<S, T>(
     serializer: S,
     tag: &'static str,
-    variant: &'static str,
+    variant: &str,
     concrete: &T,
 ) -> Result<S::Ok, S::Error>
 where
