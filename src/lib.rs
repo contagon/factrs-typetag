@@ -340,7 +340,7 @@ impl<T> Deserialize for T {}
 /// Used to mark types that have been "named"
 ///
 /// This tag will be used when the type is used as a generic for a typetag
-pub trait Tag {
+pub trait Tag: serde::Serialize {
     fn typetag_name(&self) -> String;
 }
 

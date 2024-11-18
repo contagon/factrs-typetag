@@ -60,23 +60,23 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
                 mod tag {
                     #[allow(unused_macros)]
                     macro_rules! #name_lower {
-                        (<$($generic:ident),*>) => {
+                        ($(<$($generic:ident),*>),* $(,)?) => {$(
                             impl typetag::Tag for #path< $($generic),*> {
                                 fn typetag_name(&self) -> String {
                                     String::from(concat!(#name, "<", $(stringify!($generic)),*, ">"))
                                 }
                             }
                             typetag::__private::inventory::submit! {
-                                <dyn PlainTrait>::typetag_register(
+                                <dyn #object>::typetag_register(
                                     concat!(#name, "<", $(stringify!($generic)),*, ">"),
                                     (|deserializer| typetag::__private::Result::Ok(
                                         typetag::__private::Box::new(
                                             typetag::__private::erased_serde::deserialize::<#path<$($generic),*>>(deserializer)?
                                         ),
-                                    )) as typetag::__private::DeserializeFn<<dyn PlainTrait as typetag::__private::Strictest>::Object>,
+                                    )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
                                 )
                             }
-                        }
+                        )*}
                     }
                     pub(crate) use #name_lower;
                 }
