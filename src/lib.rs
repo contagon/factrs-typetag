@@ -337,12 +337,24 @@ pub trait Deserialize {}
 
 impl<T> Deserialize for T {}
 
-/// Used to mark types that have been "named"
+/// Used to mark types that have been "tagged"
 ///
 /// This tag will be used when the type is used as a generic for a typetag
-pub trait Tag: serde::Serialize {
-    fn typetag_name(&self) -> String;
+pub trait Tagged: serde::Serialize {
+    fn tag() -> String;
 }
+
+macro_rules! impl_tag {
+    ($($ty:ident),*) => {$(
+        impl Tagged for $ty {
+            fn tag() -> String {
+                String::from(stringify!($ty))
+            }
+        }
+    )*};
+}
+
+impl_tag!(bool, u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize, f32, f64);
 
 // Not public API. Used by generated code.
 #[doc(hidden)]

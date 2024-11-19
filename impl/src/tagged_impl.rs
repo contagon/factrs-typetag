@@ -1,25 +1,32 @@
 use crate::{ImplArgs, Mode};
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
-use syn::{parse_quote, Error, ItemImpl, PathArguments, Type, TypePath};
+use quote::{quote, ToTokens};
+use syn::{
+    parse_quote, punctuated::Punctuated, ConstParam, Error, Expr, GenericParam, Ident, ItemImpl,
+    PathArguments, Token, Type, TypeParam, TypePath,
+};
 
 pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenStream {
+    // Parse name
     let name = match args.name {
-        Some(name) => quote!(#name),
+        Some(name) => name.parse().unwrap(),
         None => match type_name(&input.self_ty) {
-            Some(name) => quote!(#name),
+            Some(name) => name,
             None => {
                 let msg = "use #[typetag::serde(name = \"...\")] to specify a unique name";
                 return Error::new_spanned(&input.self_ty, msg).to_compile_error();
             }
         },
-    };
+    }
+    .to_token_stream();
 
-    let mut name_lower = name.to_string().to_lowercase();
-    name_lower.pop();
-    name_lower.remove(0);
-    let name_lower = syn::Ident::new(&name_lower, Span::call_site());
-    let name_lower = quote!(#name_lower);
+    let name_lower = name.to_string().to_lowercase();
+    let name_lower = syn::Ident::new(&name_lower, Span::call_site()).to_token_stream();
+    let name_quotes = name.to_string();
+    let name_quotes = quote!(#name_quotes);
+
+    // Parse generics
+    // TODO: default option
 
     augment_impl(&mut input, &name, mode);
 
@@ -35,7 +42,7 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
             expanded.extend(quote! {
                 typetag::__private::inventory::submit! {
                     <dyn #object>::typetag_register(
-                        #name,
+                        #name_quotes,
                         (|deserializer| typetag::__private::Result::Ok(
                             typetag::__private::Box::new(
                                 typetag::__private::erased_serde::deserialize::<#this>(deserializer)?
@@ -57,18 +64,13 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
 
             // Add in macro
             expanded.extend(quote! {
-                mod tag {
-                    #[allow(unused_macros)]
+                mod register {
+                    // #[allow(unused_macros)]
                     macro_rules! #name_lower {
                         ($(<$($generic:ident),*>),* $(,)?) => {$(
-                            impl typetag::Tag for #path< $($generic),*> {
-                                fn typetag_name(&self) -> String {
-                                    String::from(concat!(#name, "<", $(stringify!($generic)),*, ">"))
-                                }
-                            }
                             typetag::__private::inventory::submit! {
                                 <dyn #object>::typetag_register(
-                                    concat!(#name, "<", $(stringify!($generic)),*, ">"),
+                                    concat!(#name_quotes, "<", $(stringify!($generic)),*, ">"),
                                     (|deserializer| typetag::__private::Result::Ok(
                                         typetag::__private::Box::new(
                                             typetag::__private::erased_serde::deserialize::<#path<$($generic),*>>(deserializer)?
@@ -81,7 +83,6 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
                     pub(crate) use #name_lower;
                 }
             });
-            // println!("expanded: {}", expanded);
         }
     }
 
@@ -89,53 +90,67 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
 }
 
 fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
-    // If there's generics we need to handle separately
-    if !input.generics.params.is_empty() && mode.de {
-        if mode.ser {
-            match &mut input.generics.where_clause {
-                Some(ref mut where_clause) => where_clause
-                    .predicates
-                    .push(parse_quote!(Self: typetag::Tag)),
-                None => input.generics.where_clause = Some(parse_quote!(where Self: typetag::Tag)),
+    if mode.ser {
+        if !input.generics.params.is_empty() {
+            // Parse all generics
+            let mut args = Punctuated::<Expr, Token![,]>::new();
+            for p in &input.generics.params {
+                match p {
+                    GenericParam::Type(TypeParam { ident, .. }) => {
+                        match &mut input.generics.where_clause {
+                            Some(ref mut wc) => {
+                                wc.predicates.push(parse_quote!(#ident: typetag::Tagged))
+                            }
+                            None => {
+                                input.generics.where_clause =
+                                    Some(parse_quote!(where #ident: typetag::Tagged))
+                            }
+                        }
+                        args.push(parse_quote!(<#ident as typetag::Tagged>::tag()));
+                    }
+                    GenericParam::Const(ConstParam { ident, .. }) => {
+                        args.push(parse_quote!(#ident));
+                    }
+                    GenericParam::Lifetime(_) => {}
+                }
             }
 
+            let form = format!("{}<{}>", name, "{}".repeat(args.len()));
+
+            // TODO: Iterate over generics to make this item
+            // We'll try to use it out of the box for factrs
+            input.items.push(parse_quote!(
+                #[doc(hidden)]
+                fn typetag_name(&self) -> String {
+                    format!(#form, #args)
+                }
+            ));
+
+        // Otherwise just handle things regularly
+        } else {
+            let name_quotes = name.to_string();
             input.items.push(parse_quote! {
                 #[doc(hidden)]
                 fn typetag_name(&self) -> String {
-                    <Self as typetag::Tag>::typetag_name(self)
+                    String::from(#name_quotes)
                 }
             });
         }
+    }
 
+    if mode.de {
         input.items.push(parse_quote! {
             #[doc(hidden)]
             fn typetag_deserialize(&self) {}
         });
-
-    // Otherwise just handle things regularly
-    } else {
-        if mode.ser {
-            input.items.push(parse_quote! {
-                #[doc(hidden)]
-                fn typetag_name(&self) -> String {
-                    String::from(#name)
-                }
-            });
-        }
-        if mode.de {
-            input.items.push(parse_quote! {
-                #[doc(hidden)]
-                fn typetag_deserialize(&self) {}
-            });
-        }
     }
 }
 
-fn type_name(mut ty: &Type) -> Option<String> {
+fn type_name(mut ty: &Type) -> Option<Ident> {
     loop {
         match ty {
             Type::Path(TypePath { qself: None, path }) => {
-                return Some(path.segments.last().unwrap().ident.to_string());
+                return Some(path.segments.last().unwrap().ident.clone());
             }
             Type::Group(group) => {
                 ty = &group.elem;
