@@ -1,10 +1,36 @@
-use crate::{ImplArgs, Mode};
+use crate::{DefaultGeneric, ImplArgs, Mode};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     parse_quote, punctuated::Punctuated, ConstParam, Error, Expr, GenericParam, Ident, ItemImpl,
     PathArguments, Token, Type, TypeParam, TypePath,
 };
+
+#[derive(Clone)]
+enum Generic {
+    Type {
+        ident: Ident,
+        default: Option<Ident>,
+    },
+    Const(Ident),
+}
+
+impl ToTokens for Generic {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        match self {
+            Generic::Type { ident, default } => {
+                if let Some(default) = default {
+                    tokens.extend(quote!(#default));
+                } else {
+                    tokens.extend(quote!(#ident));
+                }
+            }
+            Generic::Const(ident) => {
+                tokens.extend(quote!(#ident));
+            }
+        }
+    }
+}
 
 pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenStream {
     // Parse name
@@ -26,54 +52,66 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
     let name_quotes = quote!(#name_quotes);
 
     // Parse generics
-    // TODO: default option
+    let generics = process_generics(&input.generics.params, &args.generics);
+    let needed_generics: Vec<_> = generics
+        .iter()
+        .filter(|g| {
+            !matches!(
+                g,
+                Generic::Type {
+                    default: Some(_),
+                    ..
+                }
+            )
+        })
+        .collect();
 
-    augment_impl(&mut input, &name, mode);
-
-    let object = &input.trait_.as_ref().unwrap().1;
-    let this = &input.self_ty;
+    // Add stuff to the impl
+    augment_impl(&mut input, &generics, &name, mode);
 
     let mut expanded = quote! {
         #input
     };
 
+    let object = &input.trait_.as_ref().unwrap().1;
+    // Get name of type without generics
+    let path = match &input.self_ty.as_ref() {
+        Type::Path(path) => {
+            let mut p = path.path.clone();
+            p.segments.last_mut().unwrap().arguments = PathArguments::None;
+            p.to_token_stream()
+        }
+        _ => input.self_ty.to_token_stream(),
+    };
+
     if mode.de {
-        if input.generics.params.is_empty() {
+        if needed_generics.is_empty() {
             expanded.extend(quote! {
                 typetag::__private::inventory::submit! {
                     <dyn #object>::typetag_register(
                         #name_quotes,
                         (|deserializer| typetag::__private::Result::Ok(
                             typetag::__private::Box::new(
-                                typetag::__private::erased_serde::deserialize::<#this>(deserializer)?
+                                typetag::__private::erased_serde::deserialize::<#path<#(#generics),*>>(deserializer)?
                             ),
                         )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
                     )
                 }
             });
         } else {
-            // Get name of type without generics
-            let mut path = match this.as_ref() {
-                Type::Path(path) => path.path.clone(),
-                _ => {
-                    return Error::new_spanned(&this, "Expected path for generic version")
-                        .to_compile_error()
-                }
-            };
-            path.segments.last_mut().unwrap().arguments = PathArguments::None;
-
             // Add in macro
+            println!("object {}", object.to_token_stream());
             expanded.extend(quote! {
                 mod register {
                     #[allow(unused_macros)]
                     macro_rules! #name_lower {
-                        ($(<$($generic:tt),*>),* $(,)?) => {$(
+                        ($(<#($#needed_generics:tt),*>),* $(,)?) => {$(
                             typetag::__private::inventory::submit! {
                                 <dyn #object>::typetag_register(
-                                    concat!(#name_quotes, "<", $(stringify!($generic)),*, ">"),
+                                    concat!(#name_quotes, "<", #(stringify!($#generics)),*, ">"),
                                     (|deserializer| typetag::__private::Result::Ok(
                                         typetag::__private::Box::new(
-                                            typetag::__private::erased_serde::deserialize::<#path<$($generic),*>>(deserializer)?
+                                            typetag::__private::erased_serde::deserialize::<#path<#($#generics),*>>(deserializer)?
                                         ),
                                     )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
                                 )
@@ -89,14 +127,24 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
     expanded
 }
 
-fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
+fn augment_impl(input: &mut ItemImpl, generics: &[Generic], name: &TokenStream, mode: Mode) {
     if mode.ser {
-        if !input.generics.params.is_empty() {
-            // Parse all generics
-            let mut args = Punctuated::<Expr, Token![,]>::new();
-            for p in &input.generics.params {
-                match p {
-                    GenericParam::Type(TypeParam { ident, .. }) => {
+        // Fill out where clauses
+        for g in generics {
+            match g {
+                Generic::Type { ident, default } => match default {
+                    Some(_) => {
+                        match &mut input.generics.where_clause {
+                            Some(ref mut wc) => {
+                                wc.predicates.push(parse_quote!(#ident: serde::Serialize))
+                            }
+                            None => {
+                                input.generics.where_clause =
+                                    Some(parse_quote!(where #ident: serde::Serialize))
+                            }
+                        };
+                    }
+                    None => {
                         match &mut input.generics.where_clause {
                             Some(ref mut wc) => {
                                 wc.predicates.push(parse_quote!(#ident: typetag::Tagged))
@@ -105,29 +153,28 @@ fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
                                 input.generics.where_clause =
                                     Some(parse_quote!(where #ident: typetag::Tagged))
                             }
-                        }
-                        args.push(parse_quote!(<#ident as typetag::Tagged>::tag()));
+                        };
                     }
-                    GenericParam::Const(ConstParam { ident, .. }) => {
-                        args.push(parse_quote!(#ident));
-                    }
-                    GenericParam::Lifetime(_) => {}
-                }
+                },
+                Generic::Const(_) => {}
             }
+        }
 
-            let form = format!("{}<{}>", name, "{}".repeat(args.len()));
-
-            // TODO: Iterate over generics to make this item
-            // We'll try to use it out of the box for factrs
-            input.items.push(parse_quote!(
-                #[doc(hidden)]
-                fn typetag_name(&self) -> String {
-                    format!(#form, #args)
+        // Fill out extra function definitions
+        let mut args = Punctuated::<Expr, Token![,]>::new();
+        for g in generics {
+            match g {
+                Generic::Type { ident, default } => {
+                    match default {
+                        Some(_) => {}
+                        None => args.push(parse_quote!(<#ident as typetag::Tagged>::tag())),
+                    };
                 }
-            ));
+                Generic::Const(ident) => args.push(parse_quote!(#ident)),
+            }
+        }
 
-        // Otherwise just handle things regularly
-        } else {
+        if args.is_empty() {
             let name_quotes = name.to_string();
             input.items.push(parse_quote! {
                 #[doc(hidden)]
@@ -135,6 +182,14 @@ fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
                     String::from(#name_quotes)
                 }
             });
+        } else {
+            let form = format!("{}<{}>", name, "{}".repeat(args.len()));
+            input.items.push(parse_quote!(
+                #[doc(hidden)]
+                fn typetag_name(&self) -> String {
+                    format!(#form, #args)
+                }
+            ));
         }
     }
 
@@ -144,6 +199,34 @@ fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
             fn typetag_deserialize(&self) {}
         });
     }
+}
+
+// Merge generics from the impl and from args
+fn process_generics(
+    input: &Punctuated<GenericParam, Token![,]>,
+    defaults: &[DefaultGeneric],
+) -> Vec<Generic> {
+    let mut generics = Vec::new();
+
+    for param in input {
+        match param {
+            GenericParam::Type(TypeParam { ident, .. }) => {
+                let default = defaults
+                    .iter()
+                    .find(|d| &d.typename == ident)
+                    .map(|d| d.default.clone());
+                generics.push(Generic::Type {
+                    ident: ident.clone(),
+                    default,
+                });
+            }
+            GenericParam::Const(ConstParam { ident, .. }) => {
+                generics.push(Generic::Const(ident.clone()));
+            }
+            GenericParam::Lifetime(_) => {}
+        }
+    }
+    generics
 }
 
 fn type_name(mut ty: &Type) -> Option<Ident> {

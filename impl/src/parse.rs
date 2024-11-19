@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{
-    Attribute, Error, ImplItem, ItemImpl, ItemTrait, LitStr, Token, TraitItem, Type,
+    Attribute, Error, Ident, ImplItem, ItemImpl, ItemTrait, LitStr, Token, TraitItem, Type,
     TypeParamBound, Visibility, WherePredicate,
 };
 
@@ -27,8 +27,14 @@ pub enum TraitArgs {
     },
 }
 
+pub struct DefaultGeneric {
+    pub typename: Ident,
+    pub default: Ident,
+}
+
 pub struct ImplArgs {
     pub name: Option<LitStr>,
+    pub generics: Vec<DefaultGeneric>,
 }
 
 pub enum Input {
@@ -195,15 +201,38 @@ impl Parse for TraitArgs {
 // #[typetag::serde(name = "Tag")]
 impl Parse for ImplArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        let name = if input.is_empty() {
-            None
-        } else {
+        let mut generics = Vec::new();
+
+        if input.is_empty() {
+            return Ok(ImplArgs {
+                name: None,
+                generics,
+            });
+        }
+
+        let lookahead = input.lookahead1();
+        let name = if lookahead.peek(kw::name) {
             input.parse::<kw::name>()?;
             input.parse::<Token![=]>()?;
             let name: LitStr = input.parse()?;
-            input.parse::<Option<Token![,]>>()?;
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
             Some(name)
+        } else {
+            None
         };
-        Ok(ImplArgs { name })
+
+        while !input.is_empty() {
+            let typename: Ident = input.parse()?;
+            input.parse::<Token![=]>()?;
+            let default: Ident = input.parse()?;
+            generics.push(DefaultGeneric { typename, default });
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        Ok(ImplArgs { name, generics })
     }
 }

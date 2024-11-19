@@ -9,7 +9,7 @@ mod parse;
 mod tagged_impl;
 mod tagged_trait;
 
-use crate::parse::{ImplArgs, Input, TraitArgs};
+use crate::parse::{DefaultGeneric, ImplArgs, Input, TraitArgs};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
