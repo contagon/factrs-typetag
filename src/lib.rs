@@ -354,7 +354,23 @@ macro_rules! impl_tag {
     )*};
 }
 
-impl_tag!(bool, u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize, f32, f64);
+macro_rules! impl_tag_ref {
+    ($($ty:ident),*) => {$(
+        impl Tagged for &$ty {
+            fn tag() -> String {
+                String::from(stringify!($ty))
+            }
+        }
+    )*};
+}
+
+impl_tag!(
+    bool, u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize, f32, f64, str, String
+);
+
+impl_tag_ref!(
+    bool, u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize, f32, f64, str, String
+);
 
 // Not public API. Used by generated code.
 #[doc(hidden)]

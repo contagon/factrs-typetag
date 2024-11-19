@@ -65,9 +65,9 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
             // Add in macro
             expanded.extend(quote! {
                 mod register {
-                    // #[allow(unused_macros)]
+                    #[allow(unused_macros)]
                     macro_rules! #name_lower {
-                        ($(<$($generic:ident),*>),* $(,)?) => {$(
+                        ($(<$($generic:tt),*>),* $(,)?) => {$(
                             typetag::__private::inventory::submit! {
                                 <dyn #object>::typetag_register(
                                     concat!(#name_quotes, "<", $(stringify!($generic)),*, ">"),

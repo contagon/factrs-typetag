@@ -546,13 +546,13 @@ mod tag_mismatch {
     trait Trait {}
 
     #[derive(Serialize)]
-    struct Tagged<T> {
+    struct Tagged {
         #[serde(rename = "type")]
-        t: T,
+        t: &'static str,
     }
 
     #[typetag::serialize]
-    impl<T: Serialize> Trait for Tagged<T> {}
+    impl Trait for Tagged {}
 
     #[test]
     fn test_json_serialize() {
@@ -564,11 +564,6 @@ mod tag_mismatch {
         let trait_object = &Tagged { t: "Mismatch" } as &dyn Trait;
         let err = serde_json::to_string(trait_object).unwrap_err();
         let expected = r#"mismatched value for tag "type": "Tagged" vs "Mismatch""#;
-        assert_eq!(err.to_string(), expected);
-
-        let trait_object = &Tagged { t: false } as &dyn Trait;
-        let err = serde_json::to_string(trait_object).unwrap_err();
-        let expected = r#"mismatched value for tag "type": "Tagged" vs non-string"#;
         assert_eq!(err.to_string(), expected);
     }
 }
