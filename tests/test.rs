@@ -485,7 +485,7 @@ mod generic {
     #[typetag::serialize]
     trait Generic<T> {}
 
-    #[typetag::serde]
+    #[typetag::serde(tag = "plain")]
     trait PlainTrait {}
 
     #[derive(Serialize, Deserialize)]
@@ -495,6 +495,13 @@ mod generic {
 
     #[typetag::serde]
     impl<T: Serialize> PlainTrait for GenericA<T> {}
+
+    generica!(<bool>);
+
+    #[typetag::serde]
+    impl<T> PlainTrait for T {}
+
+    plaintrait!(bool);
 }
 
 mod macro_expanded {
