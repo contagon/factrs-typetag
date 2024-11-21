@@ -1,5 +1,5 @@
 use crate::{ImplArgs, Mode};
-use proc_macro2::{Span, TokenStream};
+use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use syn::{
     parse_quote, punctuated::Punctuated, ConstParam, Error, Expr, GenericParam, Ident, ItemImpl,
@@ -23,22 +23,9 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
     let name_quotes = name.to_string();
     let name_quotes = quote!(#name_quotes);
 
-    // Parse generics
-    let generics = input
-        .generics
-        .params
-        .iter()
-        .filter_map(|p| match p {
-            GenericParam::Type(_) => Some(p),
-            GenericParam::Const(_) => Some(p),
-            GenericParam::Lifetime(_) => None,
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-
     // Add stuff to the impl
     // TODO: Need to make it work if entire name is a generic as well
-    augment_impl(&mut input, &generics, &name, mode);
+    augment_impl(&mut input, &name, mode);
 
     let mut expanded = quote! {
         #input
@@ -48,7 +35,7 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
 
     if mode.de {
         // If no generics, register the type directly
-        if generics.is_empty() {
+        if input.generics.params.is_empty() {
             let self_ty = &input.self_ty.as_ref();
             expanded.extend(quote! {
                 typetag::__private::inventory::submit! {
@@ -62,111 +49,16 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
                     )
                 }
             });
-        } else {
-            // Get all generics as idents
-            let generic_ident = generics
-                .into_iter()
-                .map(|p| match p {
-                    GenericParam::Type(tp) => tp.ident,
-                    GenericParam::Const(cp) => cp.ident,
-                    _ => panic!("unexpected type"),
-                })
-                .collect::<Vec<_>>();
-            // Extract name of type
-            let path = match &input.self_ty.as_ref() {
-                Type::Path(path) => path.path.segments.last().unwrap().ident.clone(),
-                _ => {
-                    let msg = "generics only supported on paths";
-                    return Error::new_spanned(&input.self_ty, msg).to_compile_error();
-                }
-            };
-
-            // If blanket impl, name macro after trait
-            if generic_ident.len() == 1 && generic_ident.contains(&path) {
-                let trait_lower = &object
-                    .segments
-                    .last()
-                    .unwrap()
-                    .ident
-                    .to_string()
-                    .to_lowercase();
-                let trait_lower = syn::Ident::new(&trait_lower, Span::call_site());
-                expanded.extend(quote! {
-                    #[allow(unused_macros)]
-                    macro_rules! #trait_lower {
-                        ($($kind:tt),* $(,)?) => {$(
-                            typetag::__private::inventory::submit! {
-                                <dyn #object>::typetag_register(
-                                    stringify!($kind),
-                                    (|deserializer| typetag::__private::Result::Ok(
-                                        typetag::__private::Box::new(
-                                            typetag::__private::erased_serde::deserialize::<$kind>(deserializer)?
-                                        ),
-                                    )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
-                                )
-                            }
-                        )*}
-                    }
-                    pub(crate) use #trait_lower;
-                });
-            // Otherwise, name it after type
-            } else {
-                let name_lower = name.to_string().to_lowercase();
-                let name_lower = syn::Ident::new(&name_lower, Span::call_site());
-                expanded.extend(quote! {
-                    #[allow(unused_macros)]
-                    macro_rules! #name_lower {
-                        ($(<#($#generic_ident:tt),*>),* $(,)?) => {$(
-                            typetag::__private::inventory::submit! {
-                                <dyn #object>::typetag_register(
-                                    concat!(#name_quotes, "<", #(stringify!($#generic_ident)),*, ">"),
-                                    (|deserializer| typetag::__private::Result::Ok(
-                                        typetag::__private::Box::new(
-                                            typetag::__private::erased_serde::deserialize::<#path<#($#generic_ident),*>>(deserializer)?
-                                        ),
-                                    )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
-                                )
-                            }
-                        )*}
-                    }
-                    pub(crate) use #name_lower;
-                });
-            }
         }
     }
 
     expanded
 }
 
-fn augment_impl(input: &mut ItemImpl, generics: &[GenericParam], name: &TokenStream, mode: Mode) {
+fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
     if mode.ser {
-        // Fill out where clauses
-        input.generics.make_where_clause();
-        for g in generics {
-            if let GenericParam::Type(TypeParam { ident, .. }) = g {
-                input
-                    .generics
-                    .where_clause
-                    .as_mut()
-                    .unwrap()
-                    .predicates
-                    .push(parse_quote!(#ident: typetag::Tagged))
-            }
-        }
-
-        // Fill out extra function definitions
-        let mut args = Punctuated::<Expr, Token![,]>::new();
-        for g in generics {
-            match g {
-                GenericParam::Type(TypeParam { ident, .. }) => {
-                    args.push(parse_quote!(<#ident as typetag::Tagged>::tag()))
-                }
-                GenericParam::Const(ConstParam { ident, .. }) => args.push(parse_quote!(#ident)),
-                GenericParam::Lifetime(_) => {}
-            }
-        }
-
-        if args.is_empty() {
+        // Plain name, easy peasy
+        if input.generics.params.is_empty() {
             let name_quotes = name.to_string();
             input.items.push(parse_quote! {
                 #[doc(hidden)]
@@ -175,13 +67,52 @@ fn augment_impl(input: &mut ItemImpl, generics: &[GenericParam], name: &TokenStr
                 }
             });
         } else {
-            let form = format!("{}<{}>", name, "{}".repeat(args.len()));
-            input.items.push(parse_quote!(
-                #[doc(hidden)]
-                fn typetag_name(&self) -> String {
-                    format!(#form, #args)
+            // Fill out where clauses
+            input.generics.make_where_clause();
+            for g in input.generics.clone().type_params() {
+                let ident = &g.ident;
+                input
+                    .generics
+                    .where_clause
+                    .as_mut()
+                    .unwrap()
+                    .predicates
+                    .push(parse_quote!(#ident: typetag::Tagged))
+            }
+
+            // If it's a blanket impl, use it's tag
+            if is_blanket_impl(&input) {
+                let self_ty = &input.self_ty;
+                input.items.push(parse_quote! {
+                    #[doc(hidden)]
+                    fn typetag_name(&self) -> String {
+                        <#self_ty as typetag::Tagged>::tag()
+                    }
+                });
+            // If it's not, construct what the tag will look like
+            } else {
+                // Fill out extra function definitions
+                let mut args = Punctuated::<Expr, Token![,]>::new();
+                for g in &input.generics.params {
+                    match g {
+                        GenericParam::Type(TypeParam { ident, .. }) => {
+                            args.push(parse_quote!(<#ident as typetag::Tagged>::tag()))
+                        }
+                        GenericParam::Const(ConstParam { ident, .. }) => {
+                            args.push(parse_quote!(#ident))
+                        }
+                        GenericParam::Lifetime(_) => {}
+                    }
                 }
-            ));
+
+                let form = format!("{}<{}>", name, "{}".repeat(args.len()));
+                input.items.push(parse_quote!(
+                    #[doc(hidden)]
+                    fn typetag_name(&self) -> String {
+                        format!(#form, #args)
+                    }
+                ));
+            }
         }
     }
 
@@ -205,4 +136,21 @@ fn type_name(mut ty: &Type) -> Option<Ident> {
             _ => return None,
         }
     }
+}
+
+fn is_blanket_impl(input: &ItemImpl) -> bool {
+    let generic_names = input
+        .generics
+        .type_params()
+        .into_iter()
+        .map(|p| p.ident.clone())
+        .collect::<Vec<_>>();
+
+    // Extract name of type
+    let path = match &input.self_ty.as_ref() {
+        Type::Path(path) => path.path.segments.last().unwrap().ident.clone(),
+        _ => return false,
+    };
+
+    generic_names.contains(&path)
 }

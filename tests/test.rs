@@ -496,12 +496,12 @@ mod generic {
     #[typetag::serde]
     impl<T: Serialize> PlainTrait for GenericA<T> {}
 
-    generica!(<bool>);
+    register_plaintrait!(GenericA<bool>);
 
     #[typetag::serde]
     impl<T> PlainTrait for T {}
 
-    plaintrait!(bool);
+    register_plaintrait!(bool);
 }
 
 mod macro_expanded {

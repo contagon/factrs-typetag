@@ -1,7 +1,7 @@
 use crate::{Mode, TraitArgs};
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{parse_quote, Error, ItemTrait, LitStr, TraitBoundModifier, TypeParamBound};
+use syn::{parse_quote, Error, Ident, ItemTrait, LitStr, TraitBoundModifier, TypeParamBound};
 
 pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> TokenStream {
     if mode.de && !input.generics.params.is_empty() {
@@ -29,6 +29,7 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
     let object = &input.ident;
 
     let mut expanded = TokenStream::new();
+    let mut nonconst = TokenStream::new();
 
     if mode.ser {
         let mut impl_generics = input.generics.clone();
@@ -102,16 +103,38 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
                 impl<'de> typetag::__private::serde::Deserialize<'de> for typetag::__private::Box<dyn #object + #marker_traits> {
                     fn deserialize<D>(deserializer: D) -> typetag::__private::Result<Self, D::Error>
                     where
-                        D: typetag::__private::serde::Deserializer<'de>,
+                    D: typetag::__private::serde::Deserializer<'de>,
                     {
                         typetag::__private::Result::Ok(
                             <typetag::__private::Box<dyn #object + #strictest>
-                                as typetag::__private::serde::Deserialize<'de>>::deserialize(deserializer)?
+                            as typetag::__private::serde::Deserialize<'de>>::deserialize(deserializer)?
                         )
                     }
                 }
             });
         }
+
+        let macro_name = String::from("register_") + &object.to_string().to_lowercase();
+        let macro_name = Ident::new(&macro_name, Span::call_site());
+        nonconst.extend(quote! {
+            #[allow(unused_macros)]
+            macro_rules! #macro_name {
+                ($($kind:ty),* $(,)?) => {$(
+                    typetag::__private::inventory::submit! {
+                        <dyn #object>::typetag_register(
+                            stringify!($kind),
+                            (|deserializer| typetag::__private::Result::Ok(
+                                typetag::__private::Box::new(
+                                    typetag::__private::erased_serde::deserialize::<$kind>(deserializer)?
+                                ),
+                            )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
+                        )
+                    }
+                )*}
+            }
+
+            pub(self) use #macro_name;
+        });
     }
 
     quote! {
@@ -121,6 +144,8 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
         const _: () = {
             #expanded
         };
+
+        #nonconst
     }
 }
 
