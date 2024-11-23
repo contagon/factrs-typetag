@@ -1,5 +1,6 @@
 use crate::{Mode, TraitArgs};
 use proc_macro2::{Span, TokenStream};
+use quote::format_ident;
 use quote::quote;
 use syn::{parse_quote, Error, Ident, ItemTrait, LitStr, TraitBoundModifier, TypeParamBound};
 
@@ -116,9 +117,11 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
 
         let macro_name = String::from("register_") + &object.to_string().to_lowercase();
         let macro_name = Ident::new(&macro_name, Span::call_site());
+        let macro_name_hidden = format_ident!("__{}", macro_name);
         nonconst.extend(quote! {
             #[allow(unused_macros)]
-            macro_rules! #macro_name {
+            #[macro_export]
+            macro_rules! #macro_name_hidden {
                 ($($kind:ty),* $(,)?) => {$(
                     typetag::__private::inventory::submit! {
                         <dyn #object>::typetag_register(
@@ -130,10 +133,10 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
                             )) as typetag::__private::DeserializeFn<<dyn #object as typetag::__private::Strictest>::Object>,
                         )
                     }
-                )*}
+                )*};
             }
 
-            pub(self) use #macro_name;
+            pub use #macro_name_hidden as #macro_name;
         });
     }
 

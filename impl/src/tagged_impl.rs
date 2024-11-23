@@ -7,6 +7,11 @@ use syn::{
 };
 
 pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenStream {
+    // Can't blanket impl and set name at the same time
+    if is_blanket_impl(&input) && args.name.as_ref().is_some() {
+        let msg = "can't set name on a blanket impl";
+        return Error::new_spanned(&input.self_ty, msg).to_compile_error();
+    }
     // Parse name
     let name = match args.name {
         Some(name) => name.parse().unwrap(),
