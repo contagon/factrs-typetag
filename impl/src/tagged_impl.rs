@@ -29,7 +29,6 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
     let name_quotes = quote!(#name_quotes);
 
     // Add stuff to the impl
-    // TODO: Need to make it work if entire name is a generic as well
     augment_impl(&mut input, &name, mode);
 
     let mut expanded = quote! {
