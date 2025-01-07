@@ -1,8 +1,8 @@
-use crate::{Mode, TraitArgs};
 use proc_macro2::{Span, TokenStream};
-use quote::format_ident;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{parse_quote, Error, Ident, ItemTrait, LitStr, TraitBoundModifier, TypeParamBound};
+
+use crate::{Mode, TraitArgs};
 
 pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> TokenStream {
     if mode.de && !input.generics.params.is_empty() {
@@ -121,6 +121,7 @@ pub(crate) fn expand(args: TraitArgs, mut input: ItemTrait, mode: Mode) -> Token
         nonconst.extend(quote! {
             #[allow(unused_macros)]
             #[macro_export]
+            #[doc(hidden)]
             macro_rules! #macro_name_hidden {
                 ($($kind:ty),* $(,)?) => {$(
                     typetag::__private::inventory::submit! {
