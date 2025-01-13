@@ -22,13 +22,13 @@ mod externally_tagged {
     use super::{A, B};
 
     #[typetag::serde]
-    trait Trait {
+    trait Trait1 {
         fn assert_a_is_11(&self);
         fn assert_b_is_11(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait1 for A {
         fn assert_a_is_11(&self) {
             assert_eq!(self.a, 11);
         }
@@ -38,7 +38,7 @@ mod externally_tagged {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait1 for B {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -49,7 +49,7 @@ mod externally_tagged {
 
     #[test]
     fn test_json_serialize() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait1;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"A":{"a":11}}"#;
         assert_eq!(json, expected);
@@ -58,15 +58,15 @@ mod externally_tagged {
     #[test]
     fn test_json_deserialize() {
         let json = r#"{"B":{"b":11}}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait1> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
     }
 
     #[test]
     fn test_postcard_round_trip() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait1;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait1> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_a_is_11();
     }
 }
@@ -75,13 +75,13 @@ mod internally_tagged {
     use super::{A, B, C};
 
     #[typetag::serde(tag = "type")]
-    trait Trait {
+    trait Trait2 {
         fn assert_a_is_11(&self);
         fn assert_b_is_11(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait2 for A {
         fn assert_a_is_11(&self) {
             assert_eq!(self.a, 11);
         }
@@ -91,7 +91,7 @@ mod internally_tagged {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait2 for B {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -101,7 +101,7 @@ mod internally_tagged {
     }
 
     #[typetag::serde]
-    impl Trait for C {
+    impl Trait2 for C {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -112,7 +112,7 @@ mod internally_tagged {
 
     #[test]
     fn test_json_serialize() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait2;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"type":"A","a":11}"#;
         assert_eq!(json, expected);
@@ -120,7 +120,7 @@ mod internally_tagged {
 
     #[test]
     fn test_json_serialize_with_serde_tag() {
-        let trait_object = &C { c: 11 } as &dyn Trait;
+        let trait_object = &C { c: 11 } as &dyn Trait2;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"type":"C","c":11}"#;
         assert_eq!(json, expected);
@@ -129,15 +129,15 @@ mod internally_tagged {
     #[test]
     fn test_json_deserialize() {
         let json = r#"{"type":"B","b":11}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait2> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
     }
 
     #[test]
     fn test_postcard_round_trip() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait2;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait2> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_a_is_11();
     }
 }
@@ -146,13 +146,13 @@ mod adjacently_tagged {
     use super::{A, B};
 
     #[typetag::serde(tag = "type", content = "content")]
-    trait Trait {
+    trait Trait3 {
         fn assert_a_is_11(&self);
         fn assert_b_is_11(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait3 for A {
         fn assert_a_is_11(&self) {
             assert_eq!(self.a, 11);
         }
@@ -162,7 +162,7 @@ mod adjacently_tagged {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait3 for B {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -173,7 +173,7 @@ mod adjacently_tagged {
 
     #[test]
     fn test_json_serialize() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait3;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"type":"A","content":{"a":11}}"#;
         assert_eq!(json, expected);
@@ -182,19 +182,19 @@ mod adjacently_tagged {
     #[test]
     fn test_json_deserialize() {
         let json = r#"{"type":"B","content":{"b":11}}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait3> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
 
         let json = r#"{"type":"B","content":{"b":11},"unknown":null}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait3> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
     }
 
     #[test]
     fn test_postcard_round_trip() {
-        let trait_object = &A { a: 11 } as &dyn Trait;
+        let trait_object = &A { a: 11 } as &dyn Trait3;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait3> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_a_is_11();
     }
 }
@@ -214,14 +214,14 @@ mod other_types {
     }
 
     #[typetag::serde]
-    trait Trait {
+    trait Trait4 {
         fn assert_is_a(&self);
         fn assert_is_b(&self);
         fn assert_is_c(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait4 for A {
         fn assert_is_a(&self) {}
         fn assert_is_b(&self) {
             panic!("is A");
@@ -232,7 +232,7 @@ mod other_types {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait4 for B {
         fn assert_is_a(&self) {
             panic!("is B");
         }
@@ -243,7 +243,7 @@ mod other_types {
     }
 
     #[typetag::serde]
-    impl Trait for C {
+    impl Trait4 for C {
         fn assert_is_a(&self) {
             panic!("is C");
         }
@@ -255,43 +255,43 @@ mod other_types {
 
     #[test]
     fn test_json_round_trip() {
-        let trait_object = &A {} as &dyn Trait;
+        let trait_object = &A {} as &dyn Trait4;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"A":{}}"#;
         assert_eq!(json, expected);
-        let round_trip_object: Box<dyn Trait> = serde_json::from_str(&json).unwrap();
+        let round_trip_object: Box<dyn Trait4> = serde_json::from_str(&json).unwrap();
         round_trip_object.assert_is_a();
 
-        let trait_object = &B as &dyn Trait;
+        let trait_object = &B as &dyn Trait4;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"B":null}"#;
         assert_eq!(json, expected);
-        let round_trip_object: Box<dyn Trait> = serde_json::from_str(&json).unwrap();
+        let round_trip_object: Box<dyn Trait4> = serde_json::from_str(&json).unwrap();
         round_trip_object.assert_is_b();
 
-        let trait_object = &C::Foo as &dyn Trait;
+        let trait_object = &C::Foo as &dyn Trait4;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"C":"Foo"}"#;
         assert_eq!(json, expected);
-        let round_trip_object: Box<dyn Trait> = serde_json::from_str(&json).unwrap();
+        let round_trip_object: Box<dyn Trait4> = serde_json::from_str(&json).unwrap();
         round_trip_object.assert_is_c();
     }
 
     #[test]
     fn test_postcard_round_trip() {
-        let trait_object = &A {} as &dyn Trait;
+        let trait_object = &A {} as &dyn Trait4;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait4> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_is_a();
 
-        let trait_object = &B as &dyn Trait;
+        let trait_object = &B as &dyn Trait4;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait4> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_is_b();
 
-        let trait_object = &C::Foo as &dyn Trait;
+        let trait_object = &C::Foo as &dyn Trait4;
         let bytes = postcard::to_stdvec(trait_object).unwrap();
-        let trait_object: Box<dyn Trait> = postcard::from_bytes(&bytes).unwrap();
+        let trait_object: Box<dyn Trait4> = postcard::from_bytes(&bytes).unwrap();
         trait_object.assert_is_c();
     }
 }
@@ -300,13 +300,13 @@ mod internal_with_default {
     use super::{A, B};
 
     #[typetag::serde(tag = "type", default_variant = "A")]
-    trait Trait {
+    trait Trait5 {
         fn assert_a_is_11(&self);
         fn assert_b_is_11(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait5 for A {
         fn assert_a_is_11(&self) {
             assert_eq!(self.a, 11);
         }
@@ -316,7 +316,7 @@ mod internal_with_default {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait5 for B {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -328,14 +328,14 @@ mod internal_with_default {
     #[test]
     fn test_json_deserialize_default_variant() {
         let json = r#"{"a":11}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait5> = serde_json::from_str(json).unwrap();
         trait_object.assert_a_is_11();
     }
 
     #[test]
     fn test_json_deserialize_named_variant() {
         let json = r#"{"type":"B","b":11}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait5> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
     }
 }
@@ -344,13 +344,13 @@ mod adjacent_with_default {
     use super::{A, B};
 
     #[typetag::serde(tag = "type", content = "content", default_variant = "A")]
-    trait Trait {
+    trait Trait6 {
         fn assert_a_is_11(&self);
         fn assert_b_is_11(&self);
     }
 
     #[typetag::serde]
-    impl Trait for A {
+    impl Trait6 for A {
         fn assert_a_is_11(&self) {
             assert_eq!(self.a, 11);
         }
@@ -360,7 +360,7 @@ mod adjacent_with_default {
     }
 
     #[typetag::serde]
-    impl Trait for B {
+    impl Trait6 for B {
         fn assert_a_is_11(&self) {
             panic!("is not A!");
         }
@@ -372,14 +372,14 @@ mod adjacent_with_default {
     #[test]
     fn test_json_deserialize_default_variant() {
         let json = r#"{"content":{"a":11}}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait6> = serde_json::from_str(json).unwrap();
         trait_object.assert_a_is_11();
     }
 
     #[test]
     fn test_json_deserialize_named_variant() {
         let json = r#"{"type":"B","content":{"b":11}}"#;
-        let trait_object: Box<dyn Trait> = serde_json::from_str(json).unwrap();
+        let trait_object: Box<dyn Trait6> = serde_json::from_str(json).unwrap();
         trait_object.assert_b_is_11();
     }
 }
@@ -388,18 +388,18 @@ mod adjacent_deny_unknown {
     use super::{A, B};
 
     #[typetag::serde(tag = "type", content = "content", deny_unknown_fields)]
-    trait Trait {}
+    trait Trait7 {}
 
     #[typetag::serde]
-    impl Trait for A {}
+    impl Trait7 for A {}
 
     #[typetag::serde]
-    impl Trait for B {}
+    impl Trait7 for B {}
 
     #[test]
     fn test_json_deserialize_deny_unknown() {
         let json = r#"{"type":"B","content":{"b":11},"unknown":null}"#;
-        match serde_json::from_str::<Box<dyn Trait>>(json) {
+        match serde_json::from_str::<Box<dyn Trait7>>(json) {
             Ok(_) => panic!("unexpectedly deserialized successfully despite unknown field"),
             Err(err) => {
                 let expected =
@@ -411,8 +411,7 @@ mod adjacent_deny_unknown {
 }
 
 mod marker_traits {
-    use serde::de::DeserializeOwned;
-    use serde::Serialize;
+    use serde::{de::DeserializeOwned, Serialize};
 
     #[typetag::serde]
     trait Neither {}
@@ -518,12 +517,12 @@ mod macro_expanded {
     use super::A;
 
     #[typetag::serde]
-    trait Trait {}
+    trait Trait8 {}
 
     macro_rules! impl_trait {
         ($ty:ty) => {
             #[typetag::serde]
-            impl Trait for $ty {}
+            impl Trait8 for $ty {}
         };
     }
 

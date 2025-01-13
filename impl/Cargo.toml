@@ -1,14 +1,15 @@
 [package]
-name = "typetag-impl"
-version = "0.2.19"
-authors = ["David Tolnay <dtolnay@gmail.com>"]
+name = "factrs-typetag-impl"
+version = "0.2.0"
+authors = ["Easton Potokar <contagon6@gmail.com>"]
 description = "Implementation detail of the typetag crate"
-documentation = "https://docs.rs/typetag"
+documentation = "https://docs.rs/factrs-typetag"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/dtolnay/typetag"
+repository = "https://github.com/contagon/factrs-typetag"
 
 [lib]
+name = "typetag_impl"
 proc-macro = true
 
 [dependencies]

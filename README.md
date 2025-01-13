@@ -1,3 +1,9 @@
+# factrs-typetag
+
+This is a fork of [typetag](https://github.com/dtolnay/typetag) for use in [fact.rs](https://github.com/rpl-cmu/factrs). Specifically, it adds (highly experiemental) support for deserialization of generic structs. Eventually, hopefully this will be stabilized to be merged backed upstream. 
+
+Currently based off of typetag 0.2.19, we will follow versioning with fact.rs.
+
 # Typetag
 
 [<img alt="github" src="https://img.shields.io/badge/github-dtolnay/typetag-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/dtolnay/typetag)
