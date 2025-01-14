@@ -1,15 +1,10 @@
-use crate::{ImplArgs, Mode};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse_quote, Error, ItemImpl, Type, TypePath};
 
-pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenStream {
-    if mode.de && !input.generics.params.is_empty() {
-        let msg = "deserialization of generic impls is not supported yet; \
-                   use #[typetag::serialize] to generate serialization only";
-        return Error::new_spanned(input.generics, msg).to_compile_error();
-    }
+use crate::{ImplArgs, Mode};
 
+pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenStream {
     let name = match args.name {
         Some(name) => quote!(#name),
         None => match type_name(&input.self_ty) {
@@ -30,7 +25,7 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
         #input
     };
 
-    if mode.de {
+    if mode.de && input.generics.params.is_empty() {
         expanded.extend(quote! {
             typetag::__private::inventory::submit! {
                 <dyn #object>::typetag_register(
@@ -50,12 +45,29 @@ pub(crate) fn expand(args: ImplArgs, mut input: ItemImpl, mode: Mode) -> TokenSt
 
 fn augment_impl(input: &mut ItemImpl, name: &TokenStream, mode: Mode) {
     if mode.ser {
-        input.items.push(parse_quote! {
-            #[doc(hidden)]
-            fn typetag_name(&self) -> &'static str {
-                #name
-            }
-        });
+        if input.generics.params.is_empty() {
+            input.items.push(parse_quote! {
+                #[doc(hidden)]
+                fn typetag_name(&self) -> &'static str {
+                    #name
+                }
+            });
+        } else {
+            let self_ty = &input.self_ty;
+            input.items.push(parse_quote! {
+                #[doc(hidden)]
+                fn typetag_name(&self) -> &'static str {
+                    <#self_ty as typetag::Tagged>::tag()
+                }
+            });
+            input
+                .generics
+                .make_where_clause()
+                .predicates
+                .push(parse_quote! {
+                    #self_ty: typetag::Tagged
+                });
+        }
     }
 
     if mode.de {

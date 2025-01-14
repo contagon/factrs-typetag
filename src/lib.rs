@@ -316,9 +316,9 @@ mod internally;
 mod is_serialize_str;
 mod ser;
 
-use self::__private as private;
-
 pub use typetag_impl::{deserialize, serde, serialize};
+
+use self::__private as private;
 
 // Object-safe trait bound inserted by typetag serialization. We want this just
 // so the serialization requirement appears on rustdoc's view of your trait.
@@ -335,6 +335,52 @@ impl<T> Serialize for T where T: ?Sized + erased_serde::Serialize {}
 pub trait Deserialize {}
 
 impl<T> Deserialize for T {}
+
+/// Used to mark types that have been "tagged"
+///
+/// This tag will be used when the type is used as a generic for a typetag
+pub trait Tagged: serde::Serialize {
+    fn tag() -> &'static str;
+}
+
+/// Macro for "tagging" a generic type with a trait
+///
+/// In cases where a generic type needs to be serialized via a dyn trait, this
+/// does the appropriate tagging,
+/// ```
+/// #[typetag::serde]
+/// trait MyTrait {};
+///
+/// #[derive(serde::Serialize, serde::Deserialize)]
+/// struct MyGenericType<T> {
+///     t: T,
+/// }
+///
+/// #[typetag::serde]
+/// impl<T> MyTrait for MyGenericType<T> {};
+///
+/// typetag::tag!(MyTrait, MyGenericType<bool>);
+/// ```
+#[macro_export]
+macro_rules! tag {
+    ($trait_:tt, $ty:ty) => {
+        impl typetag::Tagged for $ty {
+            fn tag() -> &'static str {
+                stringify!($ty)
+            }
+        }
+        typetag::__private::inventory::submit! {
+            <dyn $trait_>::typetag_register(
+                stringify!($ty),
+                (|deserializer| typetag::__private::Result::Ok(
+                    typetag::__private::Box::new(
+                        typetag::__private::erased_serde::deserialize::<$ty>(deserializer)?
+                    ),
+                )) as typetag::__private::DeserializeFn<<dyn $trait_ as typetag::__private::Strictest>::Object>,
+            )
+        }
+    };
+}
 
 // Not public API. Used by generated code.
 #[doc(hidden)]

@@ -411,8 +411,7 @@ mod adjacent_deny_unknown {
 }
 
 mod marker_traits {
-    use serde::de::DeserializeOwned;
-    use serde::Serialize;
+    use serde::{de::DeserializeOwned, Serialize};
 
     #[typetag::serde]
     trait Neither {}
@@ -543,30 +542,60 @@ mod tag_mismatch {
     trait Trait {}
 
     #[derive(Serialize)]
-    struct Tagged<T> {
+    struct Tagged {
         #[serde(rename = "type")]
-        t: T,
+        t: String,
     }
 
     #[typetag::serialize]
-    impl<T: Serialize> Trait for Tagged<T> {}
+    impl Trait for Tagged {}
 
     #[test]
     fn test_json_serialize() {
-        let trait_object = &Tagged { t: "Tagged" } as &dyn Trait;
+        let trait_object = &Tagged {
+            t: "Tagged".to_string(),
+        } as &dyn Trait;
         let json = serde_json::to_string(trait_object).unwrap();
         let expected = r#"{"type":"Tagged"}"#;
         assert_eq!(json, expected);
 
-        let trait_object = &Tagged { t: "Mismatch" } as &dyn Trait;
+        let trait_object = &Tagged {
+            t: "Mismatch".to_string(),
+        } as &dyn Trait;
         let err = serde_json::to_string(trait_object).unwrap_err();
         let expected = r#"mismatched value for tag "type": "Tagged" vs "Mismatch""#;
         assert_eq!(err.to_string(), expected);
+    }
+}
 
-        let trait_object = &Tagged { t: false } as &dyn Trait;
-        let err = serde_json::to_string(trait_object).unwrap_err();
-        let expected = r#"mismatched value for tag "type": "Tagged" vs non-string"#;
-        assert_eq!(err.to_string(), expected);
+mod tag_generic {
+    use serde::{Deserialize, Serialize};
+
+    #[typetag::serde(tag = "type")]
+    trait Trait {}
+
+    #[derive(Serialize, Deserialize)]
+    struct Tagged<T> {
+        t: T,
+    }
+
+    #[typetag::serde]
+    impl<T> Trait for Tagged<T> {}
+
+    typetag::tag!(Trait, Tagged<i32>);
+    typetag::tag!(Trait, Tagged<bool>);
+
+    #[test]
+    fn test_json_serialize() {
+        let trait_object = &Tagged { t: 101 } as &dyn Trait;
+        let json = serde_json::to_string(trait_object).unwrap();
+        let expected = r#"{"type":"Tagged<i32>","t":101}"#;
+        assert_eq!(json, expected);
+
+        let trait_object = &Tagged { t: true } as &dyn Trait;
+        let json = serde_json::to_string(trait_object).unwrap();
+        let expected = r#"{"type":"Tagged<bool>","t":true}"#;
+        assert_eq!(json, expected);
     }
 }
 
